@@ -56,6 +56,17 @@ test('prototype-like keys are inert, malformed fields rejected',()=>{
  assert.throws(()=>validateSnapshot({...fixture(),protocols:[Object.create(p('inherited'))]}));
  assert.throws(()=>buildBoard({as_of:'2026-11-14',protocols:[p('alone')],watchlist:[]}),/comparables/);
 });
+for (const chains of [['Binance'], ['Ethereum', 'Binance']]) {
+ test(`Binance low-fee selection preserves original chains: ${chains.join('+')}`,()=>{
+  const original = [...chains];
+  const f = fixture([p('binance-regression',{name:'Chain fee regression',chains})]);
+  const row = buildBoard(f).rows.find(r=>r.slug==='binance-regression');
+  assert.equal(row.plan.chain,'Binance');
+  assert.deepEqual(row.plan.fees,[1,8]);
+  assert.deepEqual(row.chains,original);
+  assert.deepEqual(f.protocols.find(r=>r.slug==='binance-regression').chains,original);
+ });
+}
 test('chain and category plans respect access and prohibit leverage',()=>{
  const o=buildBoard(fixture([p('eth',{chains:['Ethereum']}),p('rwa',{category:'RWA'}),p('derivative',{category:'Derivatives'}),p('curator',{category:'Risk Curators'})]));
  const row=id=>o.rows.find(r=>r.slug===id);
