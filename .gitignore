@@ -1,0 +1,11 @@
+out/
+output/
+node_modules/
+.env*
+*keypair*
+wallet*.json
+*transcript*
+*snapshot.json
+*.tar.gz
+*.log
+.DS_Store

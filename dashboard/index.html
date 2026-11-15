@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>LANTERN — Pre-token intelligence</title><link rel="stylesheet" href="app.css"></head>
+<body>
+<header><a class="brand" href="index.html" aria-label="Lantern home"><span class="mark">◈</span> LANTERN <small>RESEARCH TERMINAL</small></a><div class="header-right"><span class="dot"></span> SEALED SNAPSHOT <time id="date"></time><button id="method">Methodology ↗</button></div></header>
+<main>
+<section class="intro"><div><p class="eyebrow">THE OPPORTUNITY ATLAS / 01</p><h1>Pre-token intelligence<span>.</span></h1><p>Find the signal before the ticker. Price the protocol. Know the cost of participation.</p></div><div class="stamp">OFFLINE RESEARCH<br><strong>Evidence, not promises.</strong><br>No live feeds · No launch predictions</div></section>
+<section id="stats" class="stats" aria-label="Snapshot statistics"></section>
+<section class="workspace">
+<div class="tabs" role="tablist" aria-label="Record universe"><button role="tab" data-tab="candidate" aria-selected="true">Launch radar <span id="candidate-count"></span></button><button role="tab" data-tab="live" aria-selected="false">Live-token comparables <span id="live-count"></span></button><button role="tab" data-tab="excluded" aria-selected="false">Excluded products <span id="excluded-count"></span></button><button role="tab" data-tab="reference" aria-selected="false">Benchmark cohort</button></div>
+<div id="context" class="context"></div>
+<div class="toolbar"><label class="search"><span>⌕</span><input id="search" type="search" placeholder="Search protocol, symbol or chain…" aria-label="Search protocols"><kbd>/</kbd></label><label>Chain<select id="chain"><option value="">All chains</option></select></label><label>Sector<select id="category"><option value="">All sectors</option></select></label><label>Evidence<select id="coverage"><option value="">Any coverage</option><option>Better</option><option>Limited</option><option>Fallback</option></select></label><label class="check"><input id="watch" type="checkbox"> Watchlist only</label><button id="reset" class="quiet">Reset ↺</button></div>
+<div class="table-meta"><span id="results" aria-live="polite"></span><span class="legend"><i></i> TVL <i></i> Implied base <span>log scale / USD</span></span><button id="compare" disabled>Compare (0/3)</button></div>
+<div class="table-scroll"><table><thead id="head"></thead><tbody id="body"></tbody></table></div>
+<div id="empty" hidden><strong>No matching records.</strong><p>Try another chain or sector, or reset all filters.</p><button id="empty-reset">Reset filters</button></div>
+<div class="pagination"><span id="page-info"></span><div><button id="prev">← Previous</button><button id="next">Next →</button></div></div>
+</section>
+<footer><span><b>LANTERN</b> / Snapshot research, reproducible by design.</span><span>Implied value ≠ FDV ≠ airdrop payout. Verify access before committing capital.</span></footer>
+</main>
+<dialog id="dialog" aria-labelledby="dialog-title"><div class="dialog-top"><span id="dialog-label">PROTOCOL BRIEF</span><button id="close" aria-label="Close dialog">Close ✕</button></div><div id="dialog-content"></div></dialog>
+<script src="../data.js"></script><script src="app.js"></script>
+</body></html>
