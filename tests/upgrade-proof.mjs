@@ -1,0 +1,13 @@
+import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const [beforePath,afterPath,out]=process.argv.slice(2);
+const before=JSON.parse(readFileSync(beforePath)),after=JSON.parse(readFileSync(afterPath));
+const identities=b=>[...b.rows,...b.live,...b.excluded].map(r=>r.slug+':'+r.state).sort();
+assert.deepEqual(identities(after),identities(before));assert.deepEqual(after.rows.filter(r=>r.watchlist).map(r=>r.slug).sort(),before.rows.filter(r=>r.watchlist).map(r=>r.slug).sort());
+const old=new Map(before.rows.map(r=>[r.slug,r]));
+const changed=after.rows.filter(r=>r.rank!==old.get(r.slug).rank).length;
+assert.ok(changed>0,'Production ranking must change, not only charts');
+const current=after.advanced.models.selected,legacy=after.advanced.models.legacy;
+const proof={candidateCount:after.rows.length,watchlistCount:after.rows.filter(r=>r.watchlist).length,changedRanks:changed,selected:after.advanced.selected,metrics:after.advanced.models,meanLogErrorReductionPct:100*(1-current.meanAbsoluteLog10Error/legacy.meanAbsoluteLog10Error),bootstrapRuns:after.advanced.bootstrap_runs,limits:after.advanced.limits};
+assert.ok(current.meanAbsoluteLog10Error<legacy.meanAbsoluteLog10Error,'Selected production procedure must improve mean held-out log error');
+console.log(JSON.stringify(proof,null,2));if(out)writeFileSync(out,JSON.stringify(proof,null,2));

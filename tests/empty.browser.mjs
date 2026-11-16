@@ -1,0 +1,10 @@
+import {chromium} from '/data/home/flower-web/node_modules/playwright/index.mjs';
+import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {join} from 'node:path';
+import {execFileSync} from 'node:child_process';
+import assert from 'node:assert/strict';
+const dir=mkdtempSync('/data/home/.hermes/cache/scratch/lantern-empty-');
+const input={as_of:'2026-11-14',watchlist:[],protocols:[{slug:'sample',name:'Sample protocol',category:'Lending',chains:['Base'],tvl_usd:1e7,mcap_usd:null,gecko_id:null,symbol:null,listed_at:null,change_7d:null,coverage:'<img src=x onerror=window.__reviewXss=1>',sector_n:'<img src=x onerror=window.__reviewXss=1>',age_days:'<img src=x onerror=window.__reviewXss=1>',injected:'must-not-survive'}]};
+writeFileSync(join(dir,'input.json'),JSON.stringify(input));execFileSync(process.execPath,['main.ts','--prepare','--input',join(dir,'input.json'),'--output',join(dir,'out')]);
+const b=await chromium.launch({executablePath:'/data/home/.hermes/tools/chromium-1208/chrome-linux64/chrome',headless:true,args:['--no-sandbox']});
+try{const p=await b.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.goto('file://'+join(dir,'out/dashboard/index.html'));await p.waitForTimeout(150);assert.equal(await p.evaluate(()=>window.__reviewXss),undefined,'Snapshot extras must not execute as HTML');assert.equal(await p.evaluate(()=>Object.hasOwn(data.rows[0],'injected')),false);await p.locator('#lab-validation').click();assert.equal(errors.length,0,'Missing benchmark must not crash audit');assert.match(await p.locator('#dialog-content').textContent(),/Unavailable/);await p.keyboard.press('Escape');await p.locator('[data-detail]').first().click();assert.equal(errors.length,0);assert.match(await p.locator('.scenario-chart').textContent(),/unavailable/i);assert.ok(!/NaN|Infinity|undefined/.test(await p.locator('#dialog-content').textContent()));console.log(JSON.stringify({passed:true,errors}));}finally{await b.close();rmSync(dir,{recursive:true,force:true});}

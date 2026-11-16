@@ -1,0 +1,168 @@
+"use strict";
+
+const data = window.LANTERN, $ = e => document.querySelector(e), esc = e => String(e ?? "").replace(/[&<>"']/g, e => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+}[e])), money = e => null == e ? "—" : "$" + (e >= 1e9 ? (e / 1e9).toFixed(2) + "B" : e >= 1e6 ? (e / 1e6).toFixed(1) + "M" : e >= 1e3 ? (e / 1e3).toFixed(1) + "K" : e.toFixed(0)), exact = e => null == e ? "Unreported" : "$" + Math.round(e).toLocaleString("en-US"), pct = e => null == e ? "—" : (e > 0 ? "+" : "") + e.toFixed(1) + "%";
+
+let tab = "candidate", sort = "implied_value_usd", direction = -1, page = 0;
+
+const pageSize = 12, selected = new Set, all = new Map([ ...data.rows, ...data.live, ...data.excluded ].map(e => [ e.slug, e ]));
+
+let focusReturn = null;
+
+$("#date").textContent = data.as_of, $("#candidate-count").textContent = data.rows.filter(e => "candidate" === e.state).length,
+$("#live-count").textContent = data.live.length, $("#excluded-count").textContent = data.excluded.length,
+$("#stats").innerHTML = [ [ "Launch candidates", data.rows.filter(e => "candidate" === e.state).length, "No token recorded · verify independently" ], [ "Watchlist covered", data.model.watchlist_count + " / " + data.model.watchlist_count, "Complete sealed watchlist · not a ceiling" ], [ "Candidate TVL", money(data.rows.reduce((e, a) => e + a.tvl_usd, 0)), "Gross TVL · overlapping capital possible" ], [ "Reference universe", data.model.global_n, "Unique token IDs · cleaned live-token cohort" ] ].map(([e, a, t]) => `<div class="stat"><label>${e}</label><strong>${a}</strong><small>${t}</small></div>`).join("");
+
+for (const [e, a] of [ [ "chain", [ ...new Set([ ...all.values() ].flatMap(e => e.chains)) ] ], [ "category", [ ...new Set([ ...all.values() ].map(e => e.category)) ] ] ]) $("#" + e).insertAdjacentHTML("beforeend", a.sort().map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join(""));
+
+function universe() {
+    return "candidate" === tab ? data.rows.filter(e => "candidate" === e.state) : "live" === tab ? data.live : "excluded" === tab ? data.excluded : data.reference.map(e => ({
+        ...all.get(e.slug),
+        reference_multiple: e.multiple
+    }));
+}
+
+function filtered() {
+    const e = $("#search").value.trim().toLowerCase(), a = $("#chain").value, t = $("#category").value, n = $("#coverage").value;
+    return universe().filter(s => (!e || [ s.name, s.slug, s.symbol, ...s.chains ].join(" ").toLowerCase().includes(e)) && (!a || s.chains.includes(a)) && (!t || s.category === t) && (!n || s.coverage === n) && (!$("#watch").checked || s.watchlist)).sort((e, a) => {
+        const t = e[sort], n = a[sort];
+        if (null == t && null != n) return 1;
+        if (null == n && null != t) return -1;
+        return direction * ("string" == typeof t ? t < n ? -1 : t > n ? 1 : 0 : (t || 0) - (n || 0)) || (e.slug < a.slug ? -1 : e.slug > a.slug ? 1 : 0);
+    });
+}
+
+function chart(e) {
+    if (e.implied_value_usd == null) return "Unavailable";
+    const a = e => Math.round(12 * Math.max(0, Math.min(1, (Math.log10(Math.max(e, 1)) - 5) / 7))), t = a(e.tvl_usd), n = a(e.implied_value_usd), s = Array(13).fill("-");
+    return s[t] = "T", s[n] = t === n ? "*" : "V", `<code class="ascii-mini" role="img" aria-label="TVL ${esc(exact(e.tvl_usd))}, implied base ${esc(exact(e.implied_value_usd))}; logarithmic scale">[${s.join("")}]</code>`;
+}
+
+const sortLabel = () => ({
+    rank: "model rank",
+    name: "name",
+    category: "sector",
+    tvl_usd: "TVL",
+    change_7d: "7D TVL change",
+    age_days: "listed age",
+    implied_value_usd: "implied base value",
+    mcap_usd: "recorded market cap",
+    multiple: "TVL multiple",
+    reference_multiple: "clipped TVL multiple",
+    sector_n: "evidence count"
+}[sort] || sort), displayOrder = () => sortLabel() + " " + (1 === direction ? "ascending" : "descending");
+
+function asciiBar(e, a, t = "#") {
+    const n = Math.round(24 * Math.max(0, Math.min(1, e / a)));
+    return `<span class="ascii-bar ${":" === t ? "tvl-bar" : ""}" data-value="${e}" data-max="${a}">[${t.repeat(n)}${".".repeat(24 - n)}]</span>`;
+}
+
+function overview(e) {
+    const a = "candidate" === tab ? "implied_value_usd" : "mcap_usd", t = "candidate" === tab ? "Implied base" : "Recorded market cap", n = [ ...e ].filter(e => Number.isFinite(e[a]) && e[a] > 0).sort((e, t) => t[a] - e[a] || e.slug.localeCompare(t.slug)).slice(0, 5), s = Math.max(1, ...n.flatMap(e => [ e.tvl_usd, e[a] ]));
+    $("#overview-chart").innerHTML = `<div class="chart-head"><div><p class="eyebrow">[ LANTERN / ASCII VIEW ]</p><h2>Value at a glance<span>_</span></h2></div><p>SNAPSHOT ${esc(data.as_of)}<br><small>Top 5 matching records / linear USD</small></p></div><div class="chart-key">::: TVL <span>### ${t}</span><small>Click a protocol to inspect</small></div>${n.length ? `<div class="chart-rows">${n.map((e, t) => `<button class="chart-row" data-chart-detail="${esc(e.slug)}" aria-label="Inspect ${esc(e.name)}"><span class="chart-name"><small>${String(t + 1).padStart(2, "0")} /</small> ${esc(e.name)} <span>[+]</span></span><pre class="ascii-bars">TVL ${asciiBar(e.tvl_usd, s, ":")} ${money(e.tvl_usd).padStart(8)}\nVAL ${asciiBar(e[a], s)} ${money(e[a]).padStart(8)}</pre></button>`).join("")}</div><pre class="chart-axis">    +-----------+------------+\n    0                        ${money(s)} USD</pre>` : '<p class="note">No matching records with a reported value.</p>'}`;
+}
+
+function scenarioChart(e) {
+    if (e.implied_value_usd == null) return `<p class="scenario-chart note">Estimate unavailable: no reference tokens.</p>`;
+    const a = [ e.bear_usd, e.implied_value_usd, e.bull_usd ], t = Math.max(...a, 1);
+    return `<pre class="scenario-chart ascii-bars" role="img" aria-label="Model scenario values, linear USD scale">+---- SCENARIOS / USD -------------------+\n${a.map((e, a) => `${[ "BEAR", "BASE", "BULL" ][a]} ${asciiBar(e, t)} ${money(e).padStart(8)}`).join("\n")}\n+---------------------------------------+</pre>`;
+}
+
+function render() {
+    const e = filtered(), a = Math.max(1, Math.ceil(e.length / 12));
+    page = Math.min(page, a - 1), $("#context").textContent = "candidate" === tab ? "RESEARCH UNIVERSE  /  No token recorded. Implied launch value is a circulating-market-cap equivalent, not FDV. ★ = sealed watchlist. Parent associations outside that list are unverified." : "live" === tab ? "LIVE-TOKEN RECORDS  /  A token or market cap is recorded. These are not future-launch opportunities. Measured market caps and model equivalents are separate." : "excluded" === tab ? "EXCLUDED PRODUCTS  /  Wrapper, staking, bridge, exchange or versioned records. Kept visible for auditability; not ranked as independent launches." : "REFERENCE BENCHMARKS  /  Positive market caps, unique CoinGecko IDs; wrappers, versions and exchanges removed. Ratios are winsorized before sector shrinkage.";
+    const t = "candidate" === tab ? "implied_value_usd" : "mcap_usd", n = [ [ "", "" ], [ "rank", "candidate" === tab ? "Rank" : "" ], [ "name", "Protocol" ], [ "category", "Sector / chain" ], [ "tvl_usd", "TVL" ], [ "change_7d", "7D TVL" ], [ "age_days", "Listed age" ], [ t, "candidate" === tab ? "Implied base" : "Recorded mcap" ], [ "reference" === tab ? "reference_multiple" : "multiple", "reference" === tab ? "Clipped ratio" : "TVL → implied" ], [ "sector_n", "Evidence" ], [ "", "Action" ] ];
+    $("#head").innerHTML = "<tr>" + n.map(([e, a]) => `<th ${e ? `aria-sort="${sort === e ? 1 === direction ? "ascending" : "descending" : "none"}"` : ""}>${e ? `<button data-sort="${e}">${a} ${sort === e ? 1 === direction ? "↑" : "↓" : "↕"}</button>` : a}</th>`).join("") + "</tr>",
+    $("#body").innerHTML = e.slice(12 * page, 12 * (page + 1)).map(e => `<tr data-slug="${esc(e.slug)}"><td><input type="checkbox" data-select="${esc(e.slug)}" aria-label="Compare ${esc(e.name)}" ${selected.has(e.slug) ? "checked" : ""}></td><td class="rank">${"candidate" === tab ? String(e.rank).padStart(2, "0") : "—"}${"candidate" === tab && e.advanced ? `<span class="sub" data-rank-band title="P10–P90 rank across refits">${e.advanced.rank_low}–${e.advanced.rank_high}</span>` : ""}</td><td><div class="protocol"><span class="avatar">${esc(e.name.slice(0, 2).toUpperCase())}</span><div><button class="name" data-detail="${esc(e.slug)}">${esc(e.name)}</button> ${e.watchlist ? '<span class="star" title="Sealed watchlist">★</span>' : ""}<span class="sub">${"candidate" === tab ? "No token recorded" : esc(e.symbol || ("excluded" === tab ? "Excluded record" : "Token recorded"))}</span></div></div></td><td>${esc(e.category)}<span class="sub">${esc(e.chains[0] || "Unreported")}${e.chains.length > 1 ? " +" + (e.chains.length - 1) : ""}</span></td><td class="num">${money(e.tvl_usd)}</td><td class="num ${e.change_7d < 0 ? "negative" : "positive"}">${pct(e.change_7d)}</td><td class="num">${null == e.age_days ? "—" : esc(e.age_days) + "d"}</td><td class="num value">${money(e[t])}<span class="sub">${"candidate" === tab ? money(e.bear_usd) + " – " + money(e.bull_usd) : "Snapshot market cap"}</span></td><td>${"reference" === tab ? e.reference_multiple.toFixed(2) + "×" : chart(e)}</td><td><span class="badge ${"Better" === e.coverage ? "better" : ""}">${esc(e.coverage)}</span><span class="sub">${esc(e.sector_n)} sector peers</span></td><td><button class="name" data-detail="${esc(e.slug)}" aria-label="Open ${esc(e.name)} brief">Brief ↗</button></td></tr>`).join(""),
+    $("#results").textContent = e.length + " records · " + ("candidate" === tab ? `displayed by ${displayOrder()} · Rank remains fixed model-value rank` : "reference" === tab ? `displayed by ${displayOrder()} · benchmark multiple, not launch rank` : `displayed by ${displayOrder()} · separate reference universe`),
+    $("#empty").hidden = 0 !== e.length, $("#page-info").textContent = e.length ? `${12 * page + 1}–${Math.min(12 * (page + 1), e.length)} of ${e.length} · Page ${page + 1} / ${a}` : "0 records",
+    $("#prev").disabled = 0 === page, $("#next").disabled = page >= a - 1, $("#compare").textContent = `Compare (${selected.size}/3)`,
+    $("#compare").disabled = selected.size < 2, overview(e), labMap(e);
+}
+
+function openDialog(e, a) {
+    focusReturn = document.activeElement, $("#dialog-label").textContent = a, $("#dialog-content").innerHTML = e,
+    $("#dialog").showModal(), $("#dialog").scrollTop = 0, $("#close").focus();
+}
+
+function closeDialog() {
+    $("#dialog").close(), focusReturn?.focus();
+}
+
+function detail(e) {
+    const a = all.get(e);
+    if (!a) return;
+    const t = a.plan, n = a.advanced;
+    openDialog(`<div class="detail"><p class="eyebrow">${"candidate" === a.state ? "LAUNCH RADAR / RANK " + a.rank : a.state.toUpperCase() + " / REFERENCE ONLY"}</p><h2 id="dialog-title">${esc(a.name)}</h2><p class="lead">${esc(a.category)} / ${esc(a.chains.join(" / "))} / ${"candidate" === a.state ? "No token recorded" : esc(a.symbol || a.state)}</p><div class="detail-grid"><div><section class="panel green"><h3>Circulating-cap equivalent / USD</h3><div class="scenarios"><div><small>LOWER BAND</small><strong>${money(a.bear_usd)}</strong></div><div class="base"><small>MODEL BASE</small><strong>${money(a.implied_value_usd)}</strong></div><div><small>UPPER BAND</small><strong>${money(a.bull_usd)}</strong></div></div><p class="formula">${n ? "Fitted log value / " + esc(n.method) : "TVL × sector multiple × growth × age"}</p><p class="note">${n ? esc(data.advanced.band_label) : "Legacy scenario bounds, not confidence intervals."} Not FDV, launch probability or payout.</p></section>${modelProof(a)}<section class="panel"><h3>Snapshot evidence</h3><div class="facts"><span>TVL / seven-day change<b>${money(a.tvl_usd)} / ${pct(a.change_7d)}</b></span><span>Days since listed<b>${esc(a.age_days ?? "Unknown")}</b></span><span>Sector peers<b>${esc(a.sector_n ?? "Unknown")}</b></span><span>Parent relationship<b>${a.parent_unknown ? "Unverified" : "Watchlist screened"}</b></span></div><p class="note">Listed age is not tokenless duration. TVL may overlap and is not revenue. ${esc(a.exclusion || "")}</p></section><section class="panel"><h3>Capital and horizon</h3><div class="scenario-controls"><label>Capital ($)<input id="capital" type="number" min="0" max="1000000" value="${t.capital[1]}"></label><label>Days<input id="horizon" type="number" min="7" max="365" value="28"></label><label>Alternative APY (%)<input id="apy" type="number" min="0" max="100" value="5"></label></div><div class="costs" id="cost-result"></div></section></div><div><section class="panel"><h3>Participation / ${esc(t.mode)}</h3><p class="lead">${esc(t.chain)} / 28-day plan / $${t.capital[0]}–$${t.capital[1]} capital / $${t.fees[0]}–$${t.fees[1]} fee assumptions</p><ol>${a.farm_steps.map(e => `<li>${esc(e)}</li>`).join("")}</ol></section><p class="warning">Access and eligibility remain unverified. This snapshot does not establish an airdrop.</p></div></div></div>`, "PROTOCOL BRIEF / " + data.as_of),
+    $(".scenarios").insertAdjacentHTML("afterend", scenarioChart(a)), labPlan(a);
+    const s = () => {
+        const e = Math.max(0, Math.min(1e6, Number($("#capital").value) || 0)), a = Math.max(7, Math.min(365, Number($("#horizon").value) || 7)), t = Math.max(0, Math.min(100, Number($("#apy").value) || 0));
+        $("#cost-result").textContent = `Opportunity cost $${(e * t / 100 * a / 365).toFixed(2)} / full stress test below`;
+    };
+    for (const e of [ "capital", "horizon", "apy" ]) $("#" + e).addEventListener("input", s);
+    s();
+}
+
+function compare() {
+    const e = [ ...selected ].map(e => all.get(e));
+    openDialog(`<div class="detail"><p class="eyebrow">SIDE-BY-SIDE RESEARCH</p><h2 id="dialog-title">Compare your shortlist</h2><div class="compare-grid">${e.map(e => `<article class="panel compare-card"><h3>${esc(e.name)}</h3><span class="badge">${esc(e.state)}</span><dl>${[ [ "Model proxy", money(e.implied_value_usd) ], [ "Value band", money(e.bear_usd) + " – " + money(e.bull_usd) ], [ "TVL / 7D", money(e.tvl_usd) + " / " + pct(e.change_7d) ], [ "Rank stability", e.advanced ? e.advanced.rank_low + "–" + e.advanced.rank_high : "Unknown" ], [ "Activity / chain", esc(e.plan.mode) + " / " + esc(e.plan.chain) ], [ "Capital / fees", "$" + e.plan.capital[1] + " / $" + e.plan.fees[0] + "–$" + e.plan.fees[1] ] ].map(([e, a]) => `<dt>${e}</dt><dd>${a}</dd>`).join("")}</dl></article>`).join("")}</div><p class="note">Compare like states. Model value and rank stability do not imply allocation, eligibility or payout.</p></div>`, "SHORTLIST / " + e.length);
+}
+
+function methodology() {
+    openDialog(`<div class="detail method-copy"><p class="eyebrow">LANTERN / METHODS</p><h2 id="dialog-title">Trace the assumptions.</h2><p>${esc(data.as_of)}: ${data.model.global_n} unique-token references, largest TVL per token after exclusion screens.</p><h3>Production valuation</h3><p>${esc(data.advanced?.selected || "Unavailable")}. ${esc(data.advanced?.selection_rule || "")}</p><h3>Uncertainty</h3><p>${esc(data.advanced?.band_label || "Unavailable")}. Rank stability is conditional on model and sample.</p><h3>Evidence</h3><p>Snapshot facts, model values and user scenarios are separate. TVL may overlap; listed age is not tokenless duration. No allocation or launch probability is inferred. Verify product access and costs.</p><p class="note">Model source accompanies the build. Open Model audit for held-out errors. ${esc(data.source)}</p></div>`, "METHODOLOGY");
+}
+
+function reset() {
+    for (const e of [ "search", "chain", "category", "coverage" ]) $("#" + e).value = "";
+    $("#watch").checked = !1, selected.clear(), page = 0, sort = "candidate" === tab ? "implied_value_usd" : "mcap_usd",
+    direction = -1, render();
+}
+
+for (const e of [ "search", "chain", "category", "coverage", "watch" ]) $("#" + e).addEventListener("search" === e ? "input" : "change", () => {
+    page = 0, render();
+});
+
+$(".tabs").addEventListener("click", e => {
+    const a = e.target.closest("[data-tab]");
+    a && (tab = a.dataset.tab, document.querySelectorAll("[data-tab]").forEach(e => e.setAttribute("aria-selected", String(e === a))),
+    reset());
+}), $("#head").addEventListener("click", e => {
+    const a = e.target.closest("[data-sort]");
+    a && (direction = sort === a.dataset.sort ? -direction : -1, sort = a.dataset.sort,
+    page = 0, render());
+}), $("#body").addEventListener("click", e => {
+    const a = e.target.closest("[data-detail]");
+    a && detail(a.dataset.detail);
+}), $("#overview-chart").addEventListener("click", e => {
+    const a = e.target.closest("[data-chart-detail]");
+    a && detail(a.dataset.chartDetail);
+}), $("#body").addEventListener("change", e => {
+    const a = e.target.dataset.select;
+    if (a) {
+        if (e.target.checked) {
+            if (selected.size >= 3) return e.target.checked = !1, void ($("#results").textContent = "Select at most three records. Uncheck one to replace it.");
+            selected.add(a);
+        } else selected.delete(a);
+        render();
+    }
+}), $("#prev").onclick = () => {
+    page--, render();
+}, $("#next").onclick = () => {
+    page++, render();
+}, $("#reset").onclick = reset, $("#empty-reset").onclick = reset, $("#compare").onclick = compare,
+$("#method").onclick = methodology, $("#close").onclick = closeDialog, $("#dialog").addEventListener("cancel", e => {
+    e.preventDefault(), closeDialog();
+}), $("#dialog").addEventListener("click", e => {
+    if (e.target === $("#dialog")) {
+        const a = e.target.getBoundingClientRect();
+        (e.clientX < a.left || e.clientX > a.right || e.clientY < a.top || e.clientY > a.bottom) && closeDialog();
+    }
+}), document.addEventListener("keydown", e => {
+    "/" !== e.key || $("#dialog").open || [ "INPUT", "SELECT", "TEXTAREA" ].includes(document.activeElement.tagName) || (e.preventDefault(),
+    $("#search").focus());
+}), render();
